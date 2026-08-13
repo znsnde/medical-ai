@@ -85,13 +85,13 @@ jobs:
           # 不装则 `python -m pytest` 报 No module named pytest（2026-08-13 CI run#1 即因此失败）
           pip install pytest==9.1.1
 
-      # 建表 + admin/admin123 + Neo4j 图谱 seed；Milvus 缺失时该步降级返回退出码 1，容忍
-      - name: 初始化数据库/管理员/图谱
-        run: python -m db.init_db || echo "[CI] init_db 部分降级（通常为 Milvus 不可用），继续以 pytest 为准"
+      # Alembic 迁移 schema（fresh mysql 服务 → upgrade head 全新建表，含 FK/索引）
+      - name: 迁移数据库 schema（Alembic）
+        run: python -m db.migrate
 
-      # 外键/索引 backfill（幂等：新建库 create_all 已带约束，此处为 no-op）
-      - name: 外键/索引迁移
-        run: python -m db.migrate_fk
+      # admin/admin123 + Neo4j 图谱 seed；Milvus 缺失时该步降级返回退出码 1，容忍
+      - name: 初始化管理员/图谱 seed
+        run: python -m db.init_db || echo "[CI] init_db 部分降级（通常为 Milvus 不可用），继续以 pytest 为准"
 
       - name: 运行测试
         run: |

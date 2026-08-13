@@ -1,26 +1,22 @@
 """
 数据库/知识库初始化脚本（容器首次启动与宿主均可用）
 
-执行顺序（每步独立 try/except，任一失败不阻塞后续）：
-1. init_tables  —— 建 MySQL 表（等价 main.py __main__ 分支的 create_all）
-2. init_admin   —— 无 admin 账号则创建 admin/admin123（README 默认账号）
-3. init_neo4j   —— Disease 节点数为 0 时重建知识图谱（幂等，避免清空已有数据）
-4. init_milvus  —— 医疗指南集合为空时灌入 MEDICAL_KNOWLEDGE（幂等）
+schema 已由 Alembic 统一管理（python -m db.migrate），本脚本只负责 seed：
+1. init_admin   —— 无 admin 账号则创建 admin/admin123（README 默认账号）
+2. init_neo4j   —— Disease 节点数为 0 时重建知识图谱（幂等，避免清空已有数据）
+3. init_milvus  —— 医疗指南集合为空时灌入 MEDICAL_KNOWLEDGE（幂等）
 
-用法：
+用法（须先建表，即先跑 python -m db.migrate）：
     cd backend && venv/Scripts/python.exe -m db.init_db
     # 或容器 entrypoint 内：python -m db.init_db
 """
+import sys
+
 from db import models  # noqa: F401  确保全部表模型已注册
-from db.session import engine, Base, SessionLocal
+from db.session import engine, SessionLocal
 from db.crud import user_crud
 from core.security import hash_password
 from core.medical_knowledge_data import MEDICAL_KNOWLEDGE
-
-
-def init_tables():
-    """建 MySQL 表（不存在才建）"""
-    Base.metadata.create_all(bind=engine)
 
 
 def init_admin():
@@ -92,8 +88,14 @@ def init_milvus():
 
 
 def main():
+    # schema 归属 Alembic：空库直接 seed 会产生误导（表没建），给出明确指引而非静默降级
+    from sqlalchemy import inspect
+    tables = set(inspect(engine).get_table_names())
+    if not tables:
+        print("[init] 数据库无任何表，请先运行：python -m db.migrate（Alembic 建表）", file=sys.stderr)
+        return 1
+
     steps = [
-        ("MySQL 建表", init_tables),
         ("管理员账号", init_admin),
         ("Neo4j 图谱", init_neo4j),
         ("Milvus 指南", init_milvus),

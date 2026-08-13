@@ -1,12 +1,15 @@
 """
-外键约束 + 核心索引 迁移脚本（幂等，可重复执行）
+【历史一次性工具】孤儿/残留数据清理 + FK/索引 backfill（幂等，可重复执行）
 
-背景：项目早期 schema 无 ForeignKey/Index，删除流缺子行清理导致两库产生孤儿数据。
-本脚本一次性 backfill 现有库：
-  Phase A  孤儿清理（报告/病历/消息/会话引用父行不存在 → 删除）
-  Phase B  测试残留全清（无绑定患者 + 无绑定测试账号；用户已批准一次性全清）
-  Phase C  核心索引（高频查询列）
-  Phase D  外键约束（ON DELETE 与 models.py 声明一致）
+⚠️ 定位变化：schema 演进（建表/FK/索引）已移交 Alembic（python -m db.migrate，
+alembic/versions/0001_initial_schema 已包含全部 9 表 + 5 FK + 6 索引）。
+本脚本不再负责 schema，仅保留数据卫生能力（孤儿清理 + 测试残留清理），
+供存量库按需手动执行；新库由 Alembic 建表，无需本脚本。
+
+Phase A  孤儿清理（报告/病历/消息/会话引用父行不存在 → 删除）
+Phase B  测试残留全清（无绑定患者 + 无绑定测试账号；已绑定档案的账号一律保留）
+Phase C  核心索引（存在性检查后补建，通常已由 migrate/迁移建好 → no-op）
+Phase D  外键约束（存在性检查后补建，通常已存在 → no-op）
 
 用法（同一脚本覆盖容器内 mysql:3306 与宿主 127.0.0.1:3306）：
     cd backend && venv/Scripts/python.exe -m db.migrate_fk
@@ -15,8 +18,6 @@
 幂等保证：所有 DDL 以 information_schema 存在性检查为前提，重复执行全跳过；
 DELETE 天然幂等。清完孤儿后再加 FK，漏网孤儿会让 ALTER 大声失败（比静默带脏约束好），
 故不关闭 FOREIGN_KEY_CHECKS。
-
-本脚本只承担本次 backfill，不负责未来 schema 演进（那是 Alembic 的职责）。
 """
 import sys
 

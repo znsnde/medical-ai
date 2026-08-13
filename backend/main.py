@@ -10,7 +10,6 @@ from core.logger import setup_logging, get_logger
 
 # 导入全部业务路由
 from api import record_api, diagnosis_api, patient_api, paper_api, report_api, auth_api, dashboard_api, dicom_api, reference_image_api, consultation_api, system_api, kg_api
-from db.session import engine, Base
 import db.models
 import uvicorn
 
@@ -132,8 +131,9 @@ def root():
 
 # 程序入口启动
 if __name__ == "__main__":
-    # 启动时自动创建数据表（不存在则新建）
-    Base.metadata.create_all(bind=engine)
+    # schema 由 Alembic 统一管理：迁移失败直接阻塞启动（缺表时应用不可用）
+    from db import migrate
+    migrate.run()
     import platform
     use_reload = platform.system() != "Windows"  # Windows下关闭热重载避免进程残留
     uvicorn.run(
