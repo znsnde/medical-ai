@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL")
     # 文件路径
     UPLOAD_PATH: str = os.getenv("UPLOAD_PATH")
-    # Milvus向量库
-    MILVUS_HOST: str = os.getenv("MILVUS_HOST")
-    MILVUS_PORT: str = os.getenv("MILVUS_PORT")
+    # Milvus向量库（可选服务：连接失败时 RAG/知识库自动降级，故给默认值，缺失不致命）
+    # 默认值在无 .env / 无环境变量时兜底（CI 等干净环境不再因 None 触发 pydantic 校验失败）
+    MILVUS_HOST: str = os.getenv("MILVUS_HOST", "127.0.0.1")
+    MILVUS_PORT: str = os.getenv("MILVUS_PORT", "19530")
     # Neo4j图数据库
     NEO4J_URI: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     NEO4J_USER: str = os.getenv("NEO4J_USER", "neo4j")

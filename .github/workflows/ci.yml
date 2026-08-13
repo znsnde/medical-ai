@@ -63,6 +63,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      # 缓存 pip 下载（torch CPU wheel 192MB + 全量依赖；缓存命中后从分钟级降到秒级，
+      # 避免每次 run 从 aliyun mirror 反复下载 ~33 分钟）
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+
       # CPU 版 torch：Linux 下默认 torch 会经 cuda-toolkit 拉取数 GB 的 nvidia-* 库，
       # 预装 2.12.1+cpu 后 requirements 中的 torch==2.12.1 按 PEP440 视为已满足（与 backend/Dockerfile 一致）
       - name: 预装 CPU torch
@@ -82,7 +90,16 @@ jobs:
         run: python -m db.init_db || echo "[CI] init_db 部分降级（通常为 Milvus 不可用），继续以 pytest 为准"
 
       - name: 运行测试
-        run: PYTHONIOENCODING=utf-8 python -m pytest tests/ -v
+        run: |
+          set +e
+          PYTHONIOENCODING=utf-8 python -m pytest tests/ -v 2>&1 | tee /tmp/pytest.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            # 失败信息写为 GitHub annotation：无需 Actions 日志权限，check-runs/annotations API 即可读
+            echo "::error::pytest 退出码 $rc，失败测试如下"
+            grep -E "^(FAILED|ERROR)" /tmp/pytest.log | head -40 | sed 's/^/::error::/'
+            exit $rc
+          fi
 
   # ── 前端构建 ──
   frontend-build:
