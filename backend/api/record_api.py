@@ -47,7 +47,7 @@ def delete_record(record_id: int, db: Session = Depends(get_db)):
     ok = record_crud.delete_record(db, record_id)
     if not ok:
         return resp_fail("病历不存在或删除失败")
-    return resp_success(msg="病历已删除")
+    return resp_success(msg="病历已移入回收站，可在回收站恢复")
 
 # 分页查询全部病历
 @router.get("/list/all")

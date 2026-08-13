@@ -64,6 +64,14 @@ def test_report_pdf_download_auth(client, db):
     assert resp.headers["content-type"] == "application/pdf"
     assert resp.content.startswith(b"%PDF")
 
+    # 清理测试数据（purge 物理删除行 + PDF 文件；固定手机号不清理会污染后续软删/绑定用例）
+    try:
+        report_crud.purge_report(db, report.id)
+        record_crud.purge_record(db, record.id)
+        patient_crud.purge_patient(db, patient.id)
+    except Exception:
+        pass
+
 
 # ── 3. 参考影像：不再允许患者读任意病历诊断 ──
 @requires_mysql

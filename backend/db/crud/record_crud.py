@@ -25,17 +25,19 @@ def create_record(
 
 # 根据病历ID查询
 def get_record_by_id(db: Session, record_id: int):
-    return db.query(MedicalRecord).filter(MedicalRecord.id == record_id).first()
+    return db.query(MedicalRecord).filter(
+        MedicalRecord.id == record_id, MedicalRecord.is_deleted == 0).first()
 
 # 根据患者ID查询该患者所有病历
 def get_record_by_patient(db: Session, patient_id: int, skip: int = 0, limit: int = 20):
     return db.query(MedicalRecord)\
-        .filter(MedicalRecord.patient_id == patient_id)\
+        .filter(MedicalRecord.patient_id == patient_id, MedicalRecord.is_deleted == 0)\
         .offset(skip).limit(limit).all()
 
 # 分页查全部病历
 def get_record_list(db: Session, skip: int = 0, limit: int = 20):
-    return db.query(MedicalRecord).offset(skip).limit(limit).all()
+    return db.query(MedicalRecord).filter(MedicalRecord.is_deleted == 0)\
+        .offset(skip).limit(limit).all()
 
 # 更新病历结构化数据/影像路径
 def update_record_struct(
@@ -55,9 +57,44 @@ def update_record_struct(
     db.refresh(record)
     return record
 
-# 删除病历（连带清理物理 DICOM；CASCADE 会清其报告，故先收集报告 PDF 路径一并清理）
+# 软删除病历：级联软删其全部报告（文件保留以便恢复），单事务
 def delete_record(db: Session, record_id: int):
-    record = get_record_by_id(db, record_id)
+    record = db.query(MedicalRecord).filter(
+        MedicalRecord.id == record_id, MedicalRecord.is_deleted == 0).first()
+    if not record:
+        return False
+    for rep in db.query(DiagnosisReport).filter(DiagnosisReport.record_id == record_id).all():
+        rep.soft_delete()
+    record.soft_delete()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return True
+
+# 级联恢复病历：恢复其全部软删报告 + 自身
+def restore_record(db: Session, record_id: int):
+    record = db.query(MedicalRecord).filter(
+        MedicalRecord.id == record_id, MedicalRecord.is_deleted == 1).first()
+    if not record:
+        return None
+    for rep in db.query(DiagnosisReport).filter(
+            DiagnosisReport.record_id == record_id,
+            DiagnosisReport.is_deleted == 1).all():
+        rep.restore()
+    record.restore()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(record)
+    return record
+
+# 彻底删除病历（回收站 purge）：清理物理 DICOM；CASCADE 会清其报告，故先收集报告 PDF 路径一并清理
+def purge_record(db: Session, record_id: int):
+    record = db.query(MedicalRecord).filter(MedicalRecord.id == record_id).first()
     if not record:
         return False
     if record.dicom_file_path:
@@ -70,18 +107,25 @@ def delete_record(db: Session, record_id: int):
     db.commit()
     return True
 
+# 回收站：分页查询已删除病历
+def list_deleted_records(db: Session, skip: int = 0, limit: int = 20):
+    return db.query(MedicalRecord).filter(MedicalRecord.is_deleted == 1)\
+        .order_by(MedicalRecord.deleted_at.desc(), MedicalRecord.id.desc())\
+        .offset(skip).limit(limit).all()
+
 # ── 统计方法 ──
 
 # 获取病历总数
 def get_record_count(db: Session) -> int:
-    return db.query(MedicalRecord).count()
+    return db.query(MedicalRecord).filter(MedicalRecord.is_deleted == 0).count()
 
 # 获取今日新增病历数
 def get_today_record_count(db: Session) -> int:
     from datetime import date
     today = date.today()
     return db.query(MedicalRecord).filter(
-        MedicalRecord.create_time >= str(today)
+        MedicalRecord.create_time >= str(today),
+        MedicalRecord.is_deleted == 0
     ).count()
 
 # 获取最近 N 天的每日病历数
@@ -92,7 +136,10 @@ def get_recent_record_stats(db: Session, days: int = 7):
     results = db.query(
         func.date(MedicalRecord.create_time).label("date"),
         func.count(MedicalRecord.id).label("count")
-    ).filter(MedicalRecord.create_time >= start_date).group_by(
+    ).filter(
+        MedicalRecord.create_time >= start_date,
+        MedicalRecord.is_deleted == 0
+    ).group_by(
         func.date(MedicalRecord.create_time)
     ).all()
     return [{"date": str(r.date), "count": r.count} for r in results]
@@ -105,7 +152,8 @@ def get_disease_distribution(db: Session, top_n: int = 5):
     from db.models import DiseaseDict
 
     # 获取所有病历的结构化数据
-    records = db.query(MedicalRecord.structured_data).all()
+    records = db.query(MedicalRecord.structured_data).filter(
+        MedicalRecord.is_deleted == 0).all()
     disease_count = {}
 
     for (structured_data,) in records:

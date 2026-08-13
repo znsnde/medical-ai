@@ -9,7 +9,7 @@ from config.settings import settings
 from core.logger import setup_logging, get_logger
 
 # 导入全部业务路由
-from api import record_api, diagnosis_api, patient_api, paper_api, report_api, auth_api, dashboard_api, dicom_api, reference_image_api, consultation_api, system_api, kg_api
+from api import record_api, diagnosis_api, patient_api, paper_api, report_api, auth_api, dashboard_api, dicom_api, reference_image_api, consultation_api, system_api, kg_api, recycle_api
 import db.models
 import uvicorn
 
@@ -118,6 +118,11 @@ app.include_router(
     kg_api.router,
     prefix="/api/kg",
     tags=["医学知识图谱模块"]
+)
+app.include_router(
+    recycle_api.router,
+    prefix="/api/recycle",
+    tags=["回收站模块"]
 )
 
 # 根路径测试接口

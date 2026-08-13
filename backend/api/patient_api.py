@@ -128,4 +128,4 @@ def del_patient(patient_id: int, db: Session = Depends(get_db)):
     flag = patient_crud.delete_patient(db, patient_id)
     if not flag:
         return resp_fail("删除失败，患者不存在")
-    return resp_success(msg="患者删除成功")
+    return resp_success(msg="患者已移入回收站，可在回收站恢复")

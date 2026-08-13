@@ -1,9 +1,25 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, SmallInteger
 from datetime import datetime
 from db.session import Base
 
+
+# 软删除标记 + 操作：is_deleted/deleted_at，配合 CRUD 软删/恢复/purge 语义
+class SoftDeleteMixin:
+    is_deleted = Column(SmallInteger, nullable=False, default=0, server_default="0",
+                        comment="是否删除: 0正常 1已删除")
+    deleted_at = Column(DateTime, nullable=True, comment="软删除时间")
+
+    def soft_delete(self):
+        self.is_deleted = 1
+        self.deleted_at = datetime.now()
+
+    def restore(self):
+        self.is_deleted = 0
+        self.deleted_at = None
+
+
 # 患者表
-class Patient(Base):
+class Patient(SoftDeleteMixin, Base):
     __tablename__ = "patient"
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
     name = Column(String(50), comment="患者姓名")
@@ -16,7 +32,7 @@ class Patient(Base):
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
 
 # 电子病历表
-class MedicalRecord(Base):
+class MedicalRecord(SoftDeleteMixin, Base):
     __tablename__ = "medical_record"
     id = Column(Integer, primary_key=True, autoincrement=True)
     # 病历依附患者：删患者级联删其整条病历链
@@ -39,7 +55,7 @@ class MedicalPaper(Base):
     create_time = Column(DateTime, default=datetime.now)
 
 # 诊断报告表
-class DiagnosisReport(Base):
+class DiagnosisReport(SoftDeleteMixin, Base):
     __tablename__ = "diagnosis_report"
     id = Column(Integer, primary_key=True, autoincrement=True)
     # 报告依附病历：删病历级联删其报告

@@ -8,6 +8,7 @@ from pathlib import Path
 from config.settings import settings
 from db.session import SessionLocal
 from db.crud import patient_crud, record_crud, report_crud
+from db.models import Patient
 from conftest import requires_mysql, auth_headers
 
 MIN_PDF = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF"
@@ -29,18 +30,14 @@ def _new_patient_token(client) -> tuple:
 
 
 def _purge_legacy_patients():
-    """删除历史失败运行遗留的测试患者（及其病历/报告），恢复干净数据"""
+    """物理删除历史失败运行遗留的测试患者（含软删残留），恢复干净数据"""
     db = SessionLocal()
     try:
         for phone in _LEGACY_TEST_PHONES:
-            pat = patient_crud.get_patient_by_phone(db, phone)
-            if not pat:
-                continue
-            for rec in record_crud.get_record_by_patient(db, pat.id, 0, 9999):
-                for rep in report_crud.get_report_by_record(db, rec.id):
-                    report_crud.delete_report(db, rep.id)
-                record_crud.delete_record(db, rec.id)
-            patient_crud.delete_patient(db, pat.id)
+            # 直接查任意状态的档案（get_patient_by_phone 已过滤软删行），purge 物理删干净
+            pats = db.query(Patient).filter(Patient.phone == phone).all()
+            for pat in pats:
+                patient_crud.purge_patient(db, pat.id)
     finally:
         db.close()
 
@@ -92,8 +89,8 @@ def test_bind_flow(client):
     finally:
         db = SessionLocal()
         try:
-            record_crud.delete_record(db, rec_id)
-            patient_crud.delete_patient(db, pat_id)
+            record_crud.purge_record(db, rec_id)
+            patient_crud.purge_patient(db, pat_id)
         finally:
             db.close()
 
@@ -164,12 +161,12 @@ def test_my_reports_and_pdf_access(client):
     finally:
         db = SessionLocal()
         try:
-            report_crud.delete_report(db, rep_id)
-            report_crud.delete_report(db, rep2_id)
-            record_crud.delete_record(db, rec_id)
-            record_crud.delete_record(db, rec2_id)
-            patient_crud.delete_patient(db, pat_id)
-            patient_crud.delete_patient(db, pat2_id)
+            report_crud.purge_report(db, rep_id)
+            report_crud.purge_report(db, rep2_id)
+            record_crud.purge_record(db, rec_id)
+            record_crud.purge_record(db, rec2_id)
+            patient_crud.purge_patient(db, pat_id)
+            patient_crud.purge_patient(db, pat2_id)
         finally:
             db.close()
         try:

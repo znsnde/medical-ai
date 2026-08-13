@@ -55,9 +55,9 @@ def test_diagnosis_generate_flow(client, db, admin_token, monkeypatch):
         assert r2.status_code == 200
         assert isinstance(r2.json()["data"].get("knowledge"), dict)
     finally:
-        # ── 清理测试数据 ──
+        # ── 清理测试数据（purge 物理删除，不留软删残留） ──
         report = report_crud.get_report_by_record(db, rec.id)
         for rep in report:
-            report_crud.delete_report(db, rep.id)
-        record_crud.delete_record(db, rec.id)
-        patient_crud.delete_patient(db, pat.id)
+            report_crud.purge_report(db, rep.id)
+        record_crud.purge_record(db, rec.id)
+        patient_crud.purge_patient(db, pat.id)

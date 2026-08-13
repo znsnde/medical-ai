@@ -88,4 +88,4 @@ def delete_report(report_id: int, db: Session = Depends(get_db)):
     flag = report_crud.delete_report(db, report_id)
     if not flag:
         return resp_fail("删除失败，报告不存在")
-    return resp_success(msg="报告删除成功")
+    return resp_success(msg="报告已移入回收站，可在回收站恢复")
