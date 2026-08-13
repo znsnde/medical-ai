@@ -1,0 +1,22 @@
+# 虚拟环境 / 本地数据
+venv/
+volumes/
+logs/
+
+# 敏感配置（密钥仅经 docker-compose env_file 运行时注入，绝不进镜像）
+.env
+.env.*
+!requirements.txt
+
+# 缓存与临时文件
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 上传内容（运行时绑定挂载 backend/static:/app/static 持久化）
+static/upload/
+
+# 测试报告/临时产物
+tmp/
+*.log

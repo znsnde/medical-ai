@@ -1,0 +1,43 @@
+# ── 环境与密钥（禁止提交） ──
+.env
+.env.local
+*.env
+!.env.example
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+
+# ── 日志 ──
+logs/
+*.log
+
+# ── Node / 前端 ──
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+# 本机 npm 缓存路径（Windows 绝对路径，不提交到仓库）
+.npmrc
+
+# ── 本地数据（docker 容器卷） ──
+backend/volumes/
+
+# ── 运行时上传文件（患者DICOM/论文/报告PDF，隐私数据不入库） ──
+backend/static/upload/
+
+# ── 编辑器 ──
+.idea/
+.vscode/
+*.sw?
+.DS_Store
+
+# ── 临时 ──
+tmp/

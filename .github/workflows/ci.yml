@@ -1,0 +1,155 @@
+# 智慧医疗辅助诊断系统 CI 流水线
+# 每次 push/PR 自动：后端 pytest（真实 MySQL+Neo4j）→ 前端构建 → compose 校验
+# 手动触发（workflow_dispatch）：全栈 docker compose 端到端冒烟（含 torch 镜像构建，耗时较长）
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── 后端测试：依赖真实 MySQL + Neo4j（GitHub Actions services 提供） ──
+  # Milvus 不在 CI 起（重）：RAG 相关测试均为纯单元/降级测试，Milvus 缺失自动降级
+  backend-tests:
+    name: 后端测试 (pytest)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: "123456"
+          MYSQL_DATABASE: "medical_db"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uroot -p123456"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      neo4j:
+        image: neo4j:5-community
+        env:
+          NEO4J_AUTH: "neo4j/12345678"
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p 12345678 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DB_URL: "mysql+pymysql://root:123456@127.0.0.1:3306/medical_db"
+      NEO4J_URI: "bolt://127.0.0.1:7687"
+      NEO4J_USER: "neo4j"
+      NEO4J_PASS: "12345678"
+      # 测试全部对 LLM 打桩，无需真实 key；占位保证 OpenAI client 可实例化
+      LLM_API_KEY: "ci-placeholder"
+      LLM_BASE_URL: "https://api.deepseek.com/v1"
+      # 每次运行唯一密钥：仅用于本 run 内登录/鉴权，不进仓库
+      JWT_SECRET: "ci-${{ github.run_id }}-${{ github.sha }}"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # CPU 版 torch：Linux 下默认 torch 会经 cuda-toolkit 拉取数 GB 的 nvidia-* 库，
+      # 预装 2.12.1+cpu 后 requirements 中的 torch==2.12.1 按 PEP440 视为已满足（与 backend/Dockerfile 一致）
+      - name: 预装 CPU torch
+        run: |
+          pip install "https://mirrors.aliyun.com/pytorch-wheels/cpu/torch-2.12.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl" \
+            --extra-index-url https://mirrors.aliyun.com/pypi/simple/
+
+      - name: 安装后端依赖
+        run: pip install -r requirements.txt
+
+      # 建表 + admin/admin123 + Neo4j 图谱 seed；Milvus 缺失时该步降级返回退出码 1，容忍
+      - name: 初始化数据库/管理员/图谱
+        run: python -m db.init_db || echo "[CI] init_db 部分降级（通常为 Milvus 不可用），继续以 pytest 为准"
+
+      - name: 运行测试
+        run: PYTHONIOENCODING=utf-8 python -m pytest tests/ -v
+
+  # ── 前端构建 ──
+  frontend-build:
+    name: 前端构建 (npm)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        run: |
+          npm config set registry https://registry.npmmirror.com
+          npm ci
+
+      - name: 构建生产包
+        run: npm run build
+
+  # ── docker-compose 配置校验（快速，不构建镜像） ──
+  compose-config:
+    name: Docker Compose 配置校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 校验 compose 配置
+        run: |
+          cp backend/.env.example backend/.env
+          docker compose config -q
+
+  # ── 全栈端到端（手动触发）：完整构建含 torch 的镜像并起 7 容器冒烟 ──
+  full-stack:
+    name: 全栈端到端冒烟（手动）
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-build, compose-config]
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 准备 .env（示例值 + CI 注入）
+        run: |
+          cp backend/.env.example backend/.env
+          # 每次运行唯一 JWT 密钥，避免示例占位导致 import 报错
+          echo "JWT_SECRET=ci-${{ github.run_id }}-${{ github.sha }}" >> backend/.env
+          # 可选：配置了 LLM_API_KEY 仓库密钥时注入真实 key，否则诊断功能降级
+          if [ -n "${{ secrets.LLM_API_KEY }}" ]; then
+            echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> backend/.env
+          fi
+
+      - name: 构建并启动全栈（torch 镜像较久）
+        run: docker compose up -d --build
+
+      - name: 等待后端健康
+        run: |
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:8000/ >/dev/null 2>&1 && break
+            sleep 5
+          done
+          curl -sf http://localhost:8000/ && echo " [backend up]"
+
+      - name: 冒烟断言（登录 / 图谱 / 前端）
+        run: |
+          # 登录拿到 token
+          TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+            -d "username=admin&password=admin123" \
+            | python -c "import sys,json;print(json.load(sys.stdin)['data']['token'])")
+          [ -n "$TOKEN" ] && echo "[login ok]"
+          # 图谱非空（Neo4j seed 生效）
+          curl -s http://localhost:8000/api/kg/graph -H "Authorization: Bearer $TOKEN" \
+            | python -c "import sys,json;d=json.load(sys.stdin)['data'];assert len(d['nodes'])>0;print('[graph ok]',len(d['nodes']),'nodes')"
+          # 前端页面
+          curl -sf http://localhost:80/ >/dev/null && echo "[frontend ok]"
