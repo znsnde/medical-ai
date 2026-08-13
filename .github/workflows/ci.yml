@@ -71,7 +71,11 @@ jobs:
             --extra-index-url https://mirrors.aliyun.com/pypi/simple/
 
       - name: 安装后端依赖
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          # pytest 是开发依赖：requirements.txt 仅含运行时依赖，setup-python 干净环境无 pytest，
+          # 不装则 `python -m pytest` 报 No module named pytest（2026-08-13 CI run#1 即因此失败）
+          pip install pytest==9.1.1
 
       # 建表 + admin/admin123 + Neo4j 图谱 seed；Milvus 缺失时该步降级返回退出码 1，容忍
       - name: 初始化数据库/管理员/图谱
