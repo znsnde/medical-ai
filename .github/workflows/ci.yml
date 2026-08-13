@@ -49,6 +49,10 @@ jobs:
       LLM_BASE_URL: "https://api.deepseek.com/v1"
       # 每次运行唯一密钥：仅用于本 run 内登录/鉴权，不进仓库
       JWT_SECRET: "ci-${{ github.run_id }}-${{ github.sha }}"
+      # 上传文件目录：本机靠 backend/.env 提供，CI 无 .env，需显式给（test_security 落 PDF 依赖）
+      UPLOAD_PATH: "./static/upload"
+      # 测试全部对 LLM/RAG 打桩，无需真实模型；禁止离线下载 HuggingFace 模型（避免 CI 卡在下载）
+      HF_HUB_OFFLINE: "1"
     defaults:
       run:
         working-directory: backend
