@@ -7,6 +7,9 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  # 每日 21:23 UTC（北京时间次日 05:23）定时全栈冒烟，兜底预构建镜像/依赖漂移
+  schedule:
+    - cron: '23 21 * * *'
   workflow_dispatch:
 
 jobs:
@@ -140,12 +143,15 @@ jobs:
           cp backend/.env.example backend/.env
           docker compose config -q
 
-  # ── 全栈端到端（手动触发）：完整构建含 torch 的镜像并起 7 容器冒烟 ──
+  # ── 全栈端到端冒烟：完整构建含 torch 的镜像并起 7 容器冒烟 ──
+  # 触发：workflow_dispatch 手动 / schedule 每日定时 / push 时 commit message 含 [fullstack]
   full-stack:
-    name: 全栈端到端冒烟（手动）
+    name: 全栈端到端冒烟
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-build, compose-config]
-    if: github.event_name == 'workflow_dispatch'
+    if: |
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[fullstack]'))
     steps:
       - uses: actions/checkout@v4
 
@@ -159,26 +165,13 @@ jobs:
             echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> backend/.env
           fi
 
-      - name: 构建并启动全栈（torch 镜像较久）
-        run: docker compose up -d --build
+      # 拆为 build + up：gha 层缓存让依赖层（torch/pip/npm）跨 run 复用，
+      # 冷缓存首次约 30-40 分钟，之后仅源码层重建（3-5 分钟）
+      - name: 构建镜像（gha 层缓存）
+        run: docker compose build --cache-from type=gha --cache-to type=gha,mode=max backend frontend
 
-      - name: 等待后端健康
-        run: |
-          for i in $(seq 1 90); do
-            curl -sf http://localhost:8000/ >/dev/null 2>&1 && break
-            sleep 5
-          done
-          curl -sf http://localhost:8000/ && echo " [backend up]"
+      - name: 启动全栈（复用已构建镜像）
+        run: docker compose up -d --no-build
 
-      - name: 冒烟断言（登录 / 图谱 / 前端）
-        run: |
-          # 登录拿到 token
-          TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
-            -d "username=admin&password=admin123" \
-            | python -c "import sys,json;print(json.load(sys.stdin)['data']['token'])")
-          [ -n "$TOKEN" ] && echo "[login ok]"
-          # 图谱非空（Neo4j seed 生效）
-          curl -s http://localhost:8000/api/kg/graph -H "Authorization: Bearer $TOKEN" \
-            | python -c "import sys,json;d=json.load(sys.stdin)['data'];assert len(d['nodes'])>0;print('[graph ok]',len(d['nodes']),'nodes')"
-          # 前端页面
-          curl -sf http://localhost:80/ >/dev/null && echo "[frontend ok]"
+      - name: 冒烟断言（后端健康 / 登录 / 图谱 / 前端）
+        run: bash scripts/smoke.sh
