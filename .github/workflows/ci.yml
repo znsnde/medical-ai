@@ -167,11 +167,13 @@ jobs:
 
       # 拆为 build + up：gha 层缓存让依赖层（torch/pip/npm）跨 run 复用，
       # 冷缓存首次约 30-40 分钟，之后仅源码层重建（3-5 分钟）
+      # 注：docker compose build 的 --cache-from/--cache-to CLI flags 在 v2.38/v5 均已移除，
+      #     缓存经 docker-compose.ci.yml 的 build.cache_from/cache_to 字段（Compose spec 标准）注入
       - name: 构建镜像（gha 层缓存）
-        run: docker compose build --cache-from type=gha --cache-to type=gha,mode=max backend frontend
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml build backend frontend
 
       - name: 启动全栈（复用已构建镜像）
-        run: docker compose up -d --no-build
+        run: docker compose -f docker-compose.yml up -d --no-build
 
       - name: 冒烟断言（后端健康 / 登录 / 图谱 / 前端）
         run: bash scripts/smoke.sh
