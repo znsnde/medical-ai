@@ -15,6 +15,7 @@
 | 医学文献速读 | 论文上传 → LLM 生成摘要与核心结论 |
 | 诊断报告导出 | PDF 报告生成与预览 |
 | 用户与权限 | JWT 认证，管理员/医生/患者三角色 RBAC |
+| 患者自助查看报告 | 患者手机号认领本人档案后，可查看我的病历、诊断报告并下载本人 PDF（三级归属校验） |
 
 ## 技术架构
 
@@ -55,7 +56,7 @@
 │   ├── dcmtk_handler/       # DICOM 解析
 │   ├── db/                  # SQLAlchemy 模型、CRUD、初始化脚本（init_db.py）
 │   ├── config/settings.py   # 配置（加载 .env）
-│   ├── tests/               # pytest 冒烟测试（23 项）
+│   ├── tests/               # pytest 冒烟测试（36 项）
 │   ├── Dockerfile           # 后端容器化（含嵌入模型预下载）
 │   └── main.py              # FastAPI 入口
 ├── frontend/                # Vue 3 前端（13 个页面）
@@ -63,8 +64,10 @@
 │   └── nginx.conf           # history 路由回退 + /api、/static 反代
 ├── docker-compose.yml       # 一键部署编排（后端/前端/MySQL/Neo4j/Milvus）
 ├── scripts/
-│   ├── seed_demo_data.py    # 演示数据一键重置（Neo4j + Milvus）
+│   ├── seed_demo_data.py    # 演示数据一键重置（Neo4j + Milvus + 演示患者）
 │   └── generate_reference_images.py  # 生成典型病例参考影像
+├── docs/
+│   └── DEMO.md              # 答辩演示脚本（演示路线 + 讲稿要点 + 常见追问）
 └── README.md
 ```
 
@@ -106,7 +109,8 @@ npm run dev
 ### 3. 初始化演示数据（可选）
 
 ```bash
-# 重置 Neo4j 图谱（20 种疾病）+ 向 Milvus 灌入 18 条医疗指南
+# 重置 Neo4j 图谱（20 种疾病）+ Milvus 灌入 18 条医疗指南 + 建演示患者
+#   （patient_demo/demo1234，档案手机号 13800001111，含病历 + 诊断报告 PDF）
 backend/venv/Scripts/python.exe scripts/seed_demo_data.py
 ```
 
@@ -165,9 +169,9 @@ docker compose up -d --build
 | `/api/auth` | 用户认证 | login、register、me、users（admin） |
 | `/api/record` | 病历结构化 | struct（文本+DICOM 上传）、list、delete |
 | `/api/diagnosis` | AI 诊断 | generate、list、detail、delete |
-| `/api/patient` | 患者管理/随访 | add、my-records、chat、profile |
+| `/api/patient` | 患者管理/随访/自助 | add、bind（手机号认领）、my-records、my-reports、chat、profile |
 | `/api/paper` | 文献速读 | upload、search、analysis |
-| `/api/report` | 诊断报告 | pdf/generate、pdf/{id} |
+| `/api/report` | 诊断报告 | pdf/generate、pdf/{id}、pdf/download/{id}（患者仅本人） |
 | `/api/kg` | 知识图谱 | graph、disease、symptom、interaction、search |
 | `/api/dicom` | 影像 | preview、metadata |
 | `/api/consultation` | 多轮问诊 | chat、sessions |
@@ -182,7 +186,7 @@ cd backend
 venv/Scripts/python.exe -m pytest tests/ -v
 ```
 
-23 项冒烟测试，覆盖：应用启动/路由/鉴权、登录与 RBAC、知识图谱查询、RAG 降级、影像分析降级、诊断核心链路。MySQL/Neo4j 不可用时相关用例自动 skip，不阻塞其余。
+36 项冒烟测试（31 通过，5 项依赖宿主 Neo4j 自动 skip），覆盖：应用启动/路由/鉴权、登录与 RBAC、P0 安全（静态目录移除/越权封堵/会话归属/上传白名单）、RAG 降级、影像分析降级、诊断核心链路、患者自助（绑定/我的报告/PDF 本人放行他人 403）。MySQL/Neo4j 不可用时相关用例自动 skip，不阻塞其余。
 
 ## 项目亮点（论文/答辩素材）
 
@@ -190,7 +194,8 @@ venv/Scripts/python.exe -m pytest tests/ -v
 2. **知识图谱可视化**：ECharts 力导向图，按节点类型着色、悬停高亮、中心搜索子图展开，支持日夜主题。
 3. **多模态影像分析产品化**：DICOM 元数据 + 像素统计（HU 范围）驱动 LLM 生成三段式影像解读，诚实声明局限，LLM 不可用时优雅降级。
 4. **健壮的降级设计**：RAG/图谱/影像/LLM 任一不可用均不阻塞主流程。
-5. **工程化**：JWT 独立密钥、CORS 白名单、全局异常统一包装、审计日志（登录/用户管理/诊断）、pytest 冒烟测试、一键种子脚本、Docker 一键部署（全栈容器化）。
+5. **患者数据按归属隔离**：医生侧"全院可见"模型下，患者自助仅能通过手机号认领本人档案，报告下载经 report→record→patient.user_id 三级归属校验，未绑定/他人/匿名一律拒绝。
+6. **工程化**：JWT 独立密钥、CORS 白名单、全局异常统一包装、审计日志（登录/用户管理/诊断）、pytest 冒烟测试、一键种子脚本、Docker 一键部署（全栈容器化）、GitHub Actions 三阶段 CI（后端测试含 MySQL/Neo4j services + 前端构建 + compose 校验）。
 
 ## 常见问题
 
