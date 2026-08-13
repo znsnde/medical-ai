@@ -44,7 +44,8 @@ def my_records(db: Session = Depends(get_db), user=Depends(get_current_user)):
     return resp_success(data=result)
 
 @router.post("/chat")
-def patient_chat(question: str = Form(...)):
+def patient_chat(question: str = Form(...), user=Depends(get_current_user)):
+    # 任意登录用户（含患者）可调，但禁止匿名调用
     answer = patient_follow.patient_qa_chat(question)
     return resp_success(data={"answer": answer}, msg="问答检索完成")
 

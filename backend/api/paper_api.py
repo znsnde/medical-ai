@@ -1,10 +1,14 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Form, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from db.session import get_db
 from db.crud import paper_crud
 from medical_business import paper_reader
 from utils.file_util import get_unique_save_path
 from core.security import require_roles
+from config.settings import settings
 from utils.common import resp_success, resp_fail
 
 router = APIRouter(dependencies=[Depends(require_roles(["admin", "doctor"]))])
@@ -49,6 +53,23 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)):
     if not paper:
         return resp_fail("文献不存在")
     return resp_success(data=paper)
+
+# 受控下载：文献PDF（仅 admin/doctor，router 已统一校验角色）
+@router.get("/pdf/download/{paper_id}")
+def download_paper_pdf(paper_id: int, db: Session = Depends(get_db)):
+    paper = paper_crud.get_paper_by_id(db, paper_id)
+    if not paper or not paper.file_path:
+        return resp_fail("文献或PDF不存在")
+    # 从存库路径安全重建：取 parent 子目录名 + 文件名（兼容旧绝对路径/相对路径，防路径穿越）
+    p = Path(paper.file_path)
+    file_path = Path(settings.UPLOAD_PATH) / p.parent.name / p.name
+    if not file_path.is_file():
+        return resp_fail("PDF文件不存在")
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=f"{paper.paper_name or f'文献_{paper_id}'}.pdf"
+    )
 
 # 更新文献AI摘要和结论
 @router.put("/analysis/{paper_id}")

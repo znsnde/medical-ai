@@ -3,7 +3,6 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config.settings import settings
@@ -52,8 +51,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={"code": 500, "msg": "服务器内部错误，请稍后重试", "detail": "服务器内部错误", "data": None},
     )
 
-# 挂载静态资源目录
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# 注：不挂载 /static 公开目录。上传文件（报告PDF/DICOM/文献）一律经带鉴权接口下载，
+# 避免患者隐私文件被未授权访问（参考影像经 /api/reference-image 鉴权返回）。
 
 # 注册所有模块路由
 app.include_router(

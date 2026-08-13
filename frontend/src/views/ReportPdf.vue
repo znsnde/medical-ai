@@ -85,38 +85,38 @@ const generatePdf = async () => {
   }
 }
 
-// 打开PDF新窗口（优先用HTTP URL，兼容旧版返回的本地路径）
-const openPdf = () => {
-  const url = pdfInfo.value?.pdf_url || pdfInfo.value?.pdf_file_path
-  if (url) {
-    window.open(url)
-  }
-}
-
-// 获取单条报告PDF链接
-const getPdfUrl = async (rid) => {
+// 统一 blob 打开：走 axios 自动携带 token，规避浏览器地址栏导航无法带 Authorization 头的限制
+const openPdfBlob = async (rid) => {
+  if (!rid) return ElMessage.warning('缺少报告ID')
   try {
-    const res = await request.get(`/report/pdf/${rid}`)
-    if (res.code === 200) {
-      window.open(res.data.pdf_url)
-    } else {
-      ElMessage.warning(res.msg)
-    }
+    const blob = await request.get(`/report/pdf/download/${rid}`, { responseType: 'blob' })
+    if (!blob || blob.size === 0) return ElMessage.error('PDF文件为空')
+    const url = URL.createObjectURL(blob)
+    window.open(url)
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   } catch (e) {
-    ElMessage.error('获取PDF链接失败')
+    ElMessage.error('打开PDF失败')
   }
 }
 
-// 查看报告详情
+// 打开PDF新窗口（经受控下载接口取 blob）
+const openPdf = () => {
+  openPdfBlob(pdfInfo.value?.report_info?.id)
+}
+
+// 打开单条报告PDF
+const getPdfUrl = async (rid) => {
+  await openPdfBlob(rid)
+}
+
+// 查看报告详情（PDF 打开经受控下载接口，无需再拼 /static 公开 URL）
 const viewDetail = async (row) => {
   try {
     const res = await request.get(`/diagnosis/${row.id}`)
     if (res.code === 200) {
-      const pdfPath = res.data.pdf_path || ""
       pdfInfo.value = {
         report_info: res.data,
-        pdf_file_path: pdfPath,
-        pdf_url: pdfPath ? `/${pdfPath.replace(/\\/g, "/")}` : ""
+        pdf_file_path: res.data.pdf_path || ""
       }
     }
   } catch (e) {

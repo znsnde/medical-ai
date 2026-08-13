@@ -41,6 +41,11 @@ def get_user_sessions(db: Session, user_id: int, skip=0, limit=20):
     ).order_by(ConsultSession.update_time.desc()).offset(skip).limit(limit).all()
 
 
+def get_session(db: Session, session_id: int):
+    """按ID取会话（调用方需自行校验归属）"""
+    return db.query(ConsultSession).filter(ConsultSession.id == session_id).first()
+
+
 def get_session_messages(db: Session, session_id: int):
     return db.query(ConsultMessage).filter(
         ConsultMessage.session_id == session_id

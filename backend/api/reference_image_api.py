@@ -12,17 +12,19 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from db.crud import record_crud, report_crud
-from core.security import get_current_user
+from core.security import require_roles
 from config.image_mapping import match_disease_image, DISEASE_IMAGE_MAP, IMAGE_DISPLAY_NAME
 
-router = APIRouter()
+# 参考影像含病历诊断信息（by-record 会读取诊断文本），仅 admin/doctor 可访问，
+# 避免患者经此越权读取任意病历诊断
+router = APIRouter(dependencies=[Depends(require_roles(["admin", "doctor"]))])
 
 # 参考影像存放目录
 REF_IMAGE_DIR = Path(__file__).resolve().parent.parent / "static" / "reference_images"
 
 
 @router.get("/list", summary="列出所有可用参考影像")
-def list_reference_images(current_user=Depends(get_current_user)):
+def list_reference_images():
     """返回所有可用的参考影像列表"""
     images = []
     for filename, display_name in IMAGE_DISPLAY_NAME.items():
@@ -42,8 +44,7 @@ def list_reference_images(current_user=Depends(get_current_user)):
 @router.get("/by-record/{record_id}", summary="根据病历ID返回匹配的参考影像")
 def get_reference_by_record(
     record_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     根据病历ID:
