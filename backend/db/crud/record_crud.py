@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
-from db.models import MedicalRecord
+from db.models import MedicalRecord, DiagnosisReport
 from datetime import datetime
+from utils.file_util import safe_unlink
 
 # 新建病历
 def create_record(
@@ -54,11 +55,17 @@ def update_record_struct(
     db.refresh(record)
     return record
 
-# 删除病历
+# 删除病历（连带清理物理 DICOM；CASCADE 会清其报告，故先收集报告 PDF 路径一并清理）
 def delete_record(db: Session, record_id: int):
     record = get_record_by_id(db, record_id)
     if not record:
         return False
+    if record.dicom_file_path:
+        safe_unlink(record.dicom_file_path)
+    # 子报告行会随 CASCADE 清除，物理 PDF 需在此显式清理（取路径在删行前）
+    for rep in db.query(DiagnosisReport).filter(DiagnosisReport.record_id == record_id).all():
+        if rep.pdf_path:
+            safe_unlink(rep.pdf_path)
     db.delete(record)
     db.commit()
     return True

@@ -6,6 +6,8 @@ set -e
 
 echo "==> 初始化数据库与知识库..."
 python -m db.init_db || echo "  [WARN] init_db 部分步骤失败，系统仍将启动（相关功能降级）"
+# 外键/索引 backfill（幂等：新建库 create_all 已带约束，此处为 no-op；存量库补齐）
+python -m db.migrate_fk || echo "  [WARN] migrate_fk 失败（外键/索引未补齐）"
 
 echo "==> 启动后端服务 (port ${SERVER_PORT:-8000})"
 exec uvicorn main:app --host 0.0.0.0 --port "${SERVER_PORT:-8000}"

@@ -89,6 +89,10 @@ jobs:
       - name: 初始化数据库/管理员/图谱
         run: python -m db.init_db || echo "[CI] init_db 部分降级（通常为 Milvus 不可用），继续以 pytest 为准"
 
+      # 外键/索引 backfill（幂等：新建库 create_all 已带约束，此处为 no-op）
+      - name: 外键/索引迁移
+        run: python -m db.migrate_fk
+
       - name: 运行测试
         run: |
           set +e

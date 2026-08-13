@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 from config.settings import settings
 from uuid import uuid4
 
@@ -39,3 +40,15 @@ def get_unique_save_path(sub_dir: str, filename: str) -> str:
     # 返回相对路径（存数据库——始终用正斜杠，保证URL兼容）
     rel_path = f"static/upload/{sub_dir}/{unique_name}"
     return full_path, rel_path
+
+# 安全删除物理文件：兼容相对/绝对路径，不存在或异常时静默跳过（删除 DB 行前调用）
+def safe_unlink(rel_or_abs_path: str):
+    if not rel_or_abs_path:
+        return
+    try:
+        p = Path(rel_or_abs_path)
+        # 相对路径按当前工作目录解析（存库路径形如 static/upload/report/<uuid>.pdf）
+        if p.is_file():
+            p.unlink()
+    except OSError:
+        pass

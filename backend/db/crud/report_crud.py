@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from db.models import DiagnosisReport
 from datetime import datetime
+from utils.file_util import safe_unlink
 
 # 新建诊断报告
 def create_report(
@@ -44,11 +45,13 @@ def update_report_pdf(db: Session, report_id: int, pdf_path: str):
     db.refresh(report)
     return report
 
-# 删除报告
+# 删除报告（连带清理物理 PDF，避免文件泄露/磁盘膨胀）
 def delete_report(db: Session, report_id: int):
     report = get_report_by_id(db, report_id)
     if not report:
         return False
+    if report.pdf_path:
+        safe_unlink(report.pdf_path)
     db.delete(report)
     db.commit()
     return True

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime
+from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey
 from datetime import datetime
 from db.session import Base
 
@@ -9,15 +9,19 @@ class Patient(Base):
     name = Column(String(50), comment="患者姓名")
     age = Column(Integer, comment="年龄")
     gender = Column(String(10), comment="性别")
-    phone = Column(String(20), comment="联系电话")
-    user_id = Column(Integer, default=None, comment="关联用户ID（患者角色关联）")
+    phone = Column(String(20), index=True, comment="联系电话")
+    # 账号认领关系：删账号解绑（SET NULL），档案与医疗数据归属医院/医生，不被级联销毁
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), default=None,
+                     index=True, comment="关联用户ID（患者角色关联）")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
 
 # 电子病历表
 class MedicalRecord(Base):
     __tablename__ = "medical_record"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    patient_id = Column(Integer, comment="关联患者ID")
+    # 病历依附患者：删患者级联删其整条病历链
+    patient_id = Column(Integer, ForeignKey("patient.id", ondelete="CASCADE"),
+                        index=True, comment="关联患者ID")
     raw_text = Column(Text, comment="原始自由文本病历")
     structured_data = Column(JSON, comment="AI结构化抽取结果（症状、病史、诊断）")
     dicom_file_path = Column(String(255), comment="DICOM影像存储路径")
@@ -38,7 +42,9 @@ class MedicalPaper(Base):
 class DiagnosisReport(Base):
     __tablename__ = "diagnosis_report"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    record_id = Column(Integer, comment="关联病历ID")
+    # 报告依附病历：删病历级联删其报告
+    record_id = Column(Integer, ForeignKey("medical_record.id", ondelete="CASCADE"),
+                       index=True, comment="关联病历ID")
     image_analysis = Column(Text, comment="影像分析结果")
     diagnosis_suggest = Column(Text, comment="AI鉴别诊断建议")
     pdf_path = Column(String(255), comment="导出PDF报告路径")
@@ -50,7 +56,9 @@ class ConsultSession(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(100), comment="对话标题（首句摘要）")
     department = Column(String(50), comment="问诊科室")
-    user_id = Column(Integer, comment="用户ID")
+    # 会话是账号一次性数据：删账号连带清会话，避免永存孤儿
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"),
+                     index=True, comment="用户ID")
     message_count = Column(Integer, default=0, comment="消息数")
     create_time = Column(DateTime, default=datetime.now)
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -59,7 +67,9 @@ class ConsultSession(Base):
 class ConsultMessage(Base):
     __tablename__ = "consult_message"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(Integer, comment="会话ID")
+    # 消息依附会话：删会话自动清消息
+    session_id = Column(Integer, ForeignKey("consult_session.id", ondelete="CASCADE"),
+                        index=True, comment="会话ID")
     role = Column(String(20), comment="user/assistant")
     content = Column(Text, comment="消息内容")
     create_time = Column(DateTime, default=datetime.now)
