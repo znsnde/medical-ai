@@ -5,11 +5,22 @@ LLM辅助诊断智能体
 from openai import OpenAI
 from config.settings import settings
 
+# LLM 调用失败时返回的固定前缀，调用方据此识别并做降级兜底（不把异常字符串当业务内容）
+LLM_FAILURE_PREFIX = "[LLM调用异常]"
+
 # 初始化DeepSeek客户端
+# timeout：单次请求超时（长文本生成/影像综合诊断设 60s）
+# max_retries：网络抖动/限流时自动重试 1 次，避免瞬时错误直接写库
 client = OpenAI(
     api_key=settings.LLM_API_KEY,
-    base_url=settings.LLM_BASE_URL
+    base_url=settings.LLM_BASE_URL,
+    timeout=60.0,
+    max_retries=1
 )
+
+def is_llm_failure(text) -> bool:
+    """判断 LLM 返回是否已是失败兜底串（避免把异常信息存库/展示给用户）"""
+    return isinstance(text, str) and text.startswith(LLM_FAILURE_PREFIX)
 
 # 通用LLM调用
 def call_llm(system_prompt: str, user_prompt: str, temperature=0.3, max_tokens=2048) -> str:
@@ -25,7 +36,7 @@ def call_llm(system_prompt: str, user_prompt: str, temperature=0.3, max_tokens=2
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
-        return f"[LLM调用异常] {str(e)}"
+        return f"{LLM_FAILURE_PREFIX} {str(e)}"
 
 
 # ========== 1. 病历实体智能抽取 ==========

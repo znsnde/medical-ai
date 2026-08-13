@@ -44,6 +44,13 @@
 
       <!-- 对话区 -->
       <div v-if="inProgress || currentSessionId" class="chat-area">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="AI 智能问诊为模拟问诊，由大模型自动回复，仅供参考，不构成医疗诊断或治疗建议；如有不适请及时前往医院就诊。"
+          style="margin-bottom:12px;"
+        />
         <div class="chat-box" ref="chatBoxRef">
           <div v-for="(item, index) in chatList" :key="index"
                :class="['chat-item', item.role === 'user' ? 'user-item' : 'ai-item']">

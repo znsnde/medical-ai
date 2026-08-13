@@ -46,3 +46,41 @@ def test_rag_returns_matched_texts(monkeypatch):
     result = rag_search_medical_knowledge("高血压")
     assert len(result) == 1
     assert "高血压" in result[0]
+
+
+def test_rag_filters_by_distance_threshold(monkeypatch):
+    """距离超过阈值（不相关噪声）→ 丢弃；低于阈值保留"""
+    monkeypatch.setattr("core.medical_rag._safe_get_embedding", lambda text: [0.0] * 384)
+    from config.settings import settings
+    from core.medical_rag import rag_search_medical_knowledge
+
+    class _Hit:
+        def __init__(self, text, distance):
+            self.entity = {"text": text}
+            self.distance = distance
+
+    # 一个相关（0.5 < 阈值），两个噪声（1.2 / 1.5 > 默认阈值 1.0）
+    monkeypatch.setattr(
+        "core.vector_store.search_vector",
+        lambda *a, **k: [[
+            _Hit("高血压用药指南：低盐饮食、规律监测血压", 0.5),
+            _Hit("编程语言教程", 1.2),
+            _Hit("旅游攻略", 1.5),
+        ]],
+    )
+    result = rag_search_medical_knowledge("高血压")
+    assert len(result) == 1
+    assert "高血压" in result[0]
+
+    # 无 distance 属性的命中（兼容模拟对象）默认保留，不误伤
+    class _HitNoDist:
+        def __init__(self, text):
+            self.entity = {"text": text}
+
+    monkeypatch.setattr(
+        "core.vector_store.search_vector",
+        lambda *a, **k: [[_HitNoDist("糖尿病饮食建议")]],
+    )
+    result = rag_search_medical_knowledge("糖尿病")
+    assert len(result) == 1
+    assert "糖尿病" in result[0]

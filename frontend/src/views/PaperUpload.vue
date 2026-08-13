@@ -49,6 +49,13 @@
 
     <!-- AI解析结果弹窗 -->
     <el-dialog v-model="resultVisible" title="🧠 AI文献解析结果" width="650px" :close-on-click-modal="false">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="AI 摘要与结论由大模型自动生成，可能存在不准确之处，仅供文献速读参考；重要内容请以原文为准。"
+        style="margin-bottom:16px;"
+      />
       <template v-if="resultData">
         <div style="margin-bottom:16px;">
           <label style="font-size:12px;color:var(--text-secondary);">文献标题</label>

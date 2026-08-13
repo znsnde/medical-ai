@@ -29,6 +29,9 @@ class Settings(BaseSettings):
         "CORS_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173,http://[::1]:5173"
     )
+    # RAG 检索相似度阈值：Milvus L2 距离上限，超过视为不相关噪声丢弃
+    # （实测 all-MiniLM-L6-v2 + 医疗指南：相关命中 <1.0，无关 ≥0.97，默认取 1.0）
+    RAG_DISTANCE_THRESHOLD: float = float(os.getenv("RAG_DISTANCE_THRESHOLD", 1.0))
 
     @property
     def cors_origin_list(self) -> list:

@@ -4,6 +4,7 @@ RAG知识库检索模块
 当Milvus/模型不可用时降级返回空结果
 """
 from utils.text_clean import clean_medical_text
+from config.settings import settings
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,9 +27,14 @@ def rag_search_medical_knowledge(query: str, top_k=3) -> list:
     try:
         from core.vector_store import search_vector
         search_res = search_vector(query_vec, top_k=top_k)
+        # L2 距离越小越相关；超过阈值视为不相关噪声丢弃
+        # getattr 兜底：模拟命中对象可能没有 distance 属性（测试场景），默认 0.0 即全部保留
+        threshold = settings.RAG_DISTANCE_THRESHOLD
         match_texts = []
         for hits in search_res:
             for hit in hits:
+                if getattr(hit, "distance", 0.0) > threshold:
+                    continue
                 text = hit.entity.get("text")
                 if text:
                     match_texts.append(text)

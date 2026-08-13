@@ -5,7 +5,7 @@
 from sqlalchemy.orm import Session
 from db.crud import record_crud, report_crud
 from core.medical_rag import rag_search_medical_knowledge
-from core.diagnosis_agent import llm_generate_diagnosis
+from core.diagnosis_agent import llm_generate_diagnosis, is_llm_failure
 from core.multimodal_model import generate_image_analysis_report
 from medical_business.knowledge_graph import search_for_diagnosis
 from utils.common import resp_success, resp_fail
@@ -45,6 +45,9 @@ def get_assist_diagnosis(db: Session, record_id: int):
         reference_knowledge=match_knowledge,
         image_analysis=image_analysis
     )
+    # LLM 调用失败时，不把异常信息当诊断建议写库，落一条友好的降级提示
+    if is_llm_failure(suggest):
+        suggest = "（大模型服务暂不可用，未能生成 AI 辅助诊断建议。请结合病历原文、结构化实体与影像分析，由执业医师给出诊断意见。）"
 
     # 5. 知识图谱查询关联医学知识（相关疾病/用药相互作用/并发症）
     medicines = structured.get("medicine", []) if isinstance(structured, dict) else []

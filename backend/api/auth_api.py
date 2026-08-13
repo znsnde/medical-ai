@@ -1,3 +1,8 @@
+import re
+import threading
+import time
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, Form, Query
 from sqlalchemy.orm import Session
 from db.session import get_db
@@ -10,6 +15,52 @@ logger = get_logger("audit")
 
 router = APIRouter()
 
+
+# ══════════ 登录防爆破（进程内存，单实例够用） ══════════
+# 同一用户名连续失败 5 次 → 锁定 15 分钟；成功登录或锁定期满后自动重置
+_LOGIN_FAIL_LIMIT = 5
+_LOGIN_LOCK_SECONDS = 15 * 60
+_login_fail_count = defaultdict(int)   # username -> 连续失败次数
+_login_lock_until = {}                 # username -> 解锁时间戳
+_login_lock = threading.Lock()
+
+
+def _login_remaining_lock(username: str) -> float:
+    """返回剩余锁定秒数；未锁定返回 0。仅在确有锁定且锁定期满时清零失败计数。"""
+    with _login_lock:
+        until = _login_lock_until.get(username, 0)
+        if until <= time.time():
+            # 有锁但已过期 → 重置整个状态；未锁过（get 默认 0）→ 保留失败计数
+            if _login_lock_until.pop(username, None) is not None:
+                _login_fail_count.pop(username, None)
+            return 0.0
+        return until - time.time()
+
+
+def _record_login_fail(username: str):
+    """记录一次失败；达到阈值则触发锁定"""
+    with _login_lock:
+        _login_fail_count[username] += 1
+        if _login_fail_count[username] >= _LOGIN_FAIL_LIMIT:
+            _login_lock_until[username] = time.time() + _LOGIN_LOCK_SECONDS
+
+
+def _reset_login_state(username: str):
+    """登录成功后清零失败/锁定状态"""
+    with _login_lock:
+        _login_fail_count.pop(username, None)
+        _login_lock_until.pop(username, None)
+
+
+# ══════════ 密码强度校验 ══════════
+def _check_password_strength(password: str):
+    """密码强度：至少 8 位，且同时包含字母和数字（兼容 test1234 / admin123）"""
+    if len(password) < 8:
+        return "密码至少8个字符"
+    if not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+        return "密码需同时包含字母和数字"
+    return None
+
 # ── 登录（公开） ──
 @router.post("/login", summary="用户登录")
 def login(
@@ -17,17 +68,27 @@ def login(
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    # 防爆破：连续失败达到阈值后先拦截，避免继续做 bcrypt 校验
+    remaining = _login_remaining_lock(username)
+    if remaining > 0:
+        logger.warning("[审计] 登录被锁定 username=%s 剩余=%.0f秒", username, remaining)
+        return resp_fail("登录失败次数过多，请稍后再试", code=429)
+
     user = user_crud.get_user_by_username(db, username)
     if not user:
+        _record_login_fail(username)
         logger.warning("[审计] 登录失败 username=%s 原因=用户不存在", username)
         return resp_fail("用户名或密码错误", code=401)
     if not user.is_active:
         logger.warning("[审计] 登录失败 username=%s 原因=账号被禁用", username)
         return resp_fail("该用户已被禁用，请联系管理员", code=403)
     if not verify_password(password, user.password_hash):
+        _record_login_fail(username)
         logger.warning("[审计] 登录失败 username=%s 原因=密码错误", username)
         return resp_fail("用户名或密码错误", code=401)
 
+    # 登录成功：清零失败/锁定状态
+    _reset_login_state(username)
     token = create_access_token(data={"user_id": user.id})
     logger.info("[审计] 登录成功 username=%s role=%s", user.username, user.role)
     return resp_success(data={
@@ -52,8 +113,9 @@ def register_public(
 ):
     if not username or len(username) < 2:
         return resp_fail("用户名至少2个字符")
-    if not password or len(password) < 4:
-        return resp_fail("密码至少4个字符")
+    weak = _check_password_strength(password)
+    if weak:
+        return resp_fail(weak)
     exist = user_crud.get_user_by_username(db, username)
     if exist:
         return resp_fail("用户名已存在")
@@ -86,8 +148,9 @@ def register(
     # 校验参数
     if not username or len(username) < 2:
         return resp_fail("用户名至少2个字符")
-    if not password or len(password) < 4:
-        return resp_fail("密码至少4个字符")
+    weak = _check_password_strength(password)
+    if weak:
+        return resp_fail(weak)
     if role not in ["admin", "doctor", "patient"]:
         return resp_fail("角色无效，可选: admin/doctor/patient")
 
@@ -162,6 +225,9 @@ def update_user(
     if is_active is not None:
         update_kwargs["is_active"] = is_active
     if password:
+        weak = _check_password_strength(password)
+        if weak:
+            return resp_fail(weak)
         update_kwargs["password_hash"] = hash_password(password)
 
     user = user_crud.update_user(db, user_id, **update_kwargs)

@@ -62,3 +62,39 @@ def test_admin_token_works(client, admin_token):
     r = client.get("/api/auth/me", headers=auth_headers(admin_token))
     assert r.status_code == 200
     assert r.json()["data"]["username"] == "admin"
+
+
+@requires_mysql
+def test_register_rejects_weak_password(client):
+    """密码强度：过短 / 无字母 / 无数字 → 拒绝注册"""
+    # 过短
+    r = client.post("/api/auth/register/public", data={
+        "username": "weak_short_xx", "password": "abc123"
+    })
+    assert r.json()["code"] != 200
+    assert "8" in r.json()["msg"]
+    # 只有字母无数字
+    r = client.post("/api/auth/register/public", data={
+        "username": "weak_letter_xx", "password": "abcdefgh"
+    })
+    assert r.json()["code"] != 200
+    assert "数字" in r.json()["msg"]
+    # 只有数字无字母
+    r = client.post("/api/auth/register/public", data={
+        "username": "weak_digit_xx", "password": "12345678"
+    })
+    assert r.json()["code"] != 200
+    assert "字母" in r.json()["msg"]
+
+
+@requires_mysql
+def test_login_brute_force_lockout(client):
+    """同一用户名连续失败 5 次 → 第 6 次被锁定（code 429）"""
+    uname = "bf_lock_test_zzz"  # 不存在的用户，只消耗失败计数
+    for _ in range(5):
+        r = client.post("/api/auth/login", data={"username": uname, "password": "wrong-pwd-1"})
+        assert r.json()["code"] == 401
+    # 第 6 次：锁定拦截
+    r = client.post("/api/auth/login", data={"username": uname, "password": "wrong-pwd-1"})
+    assert r.json()["code"] == 429
+    assert "稍后再试" in r.json()["msg"]

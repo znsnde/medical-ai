@@ -19,6 +19,17 @@ from core.security import get_current_user, require_roles
 router = APIRouter(dependencies=[Depends(require_roles(["admin", "doctor"]))])
 
 
+def _mask_patient_id(value) -> str:
+    """
+    DICOM 文件内嵌的患者标识脱敏：不返回真实的 PatientName / PatientID。
+    影像文件多来自公共影像库/第三方，内嵌姓名属于无关第三人隐私；
+    本院患者身份以病历记录为准，医生无需依赖影像内嵌标识。
+    """
+    if value is None or value == "未知":
+        return value
+    return "***"
+
+
 def _dicom_to_png_bytes(dcm_path: str, window_width: float = None,
                         window_center: float = None) -> bytes:
     """
@@ -117,10 +128,10 @@ def dicom_metadata(
 
     ds = dcmread(record.dicom_file_path, force=True)
 
-    # 提取常见标签
+    # 提取常见标签（患者标识经 _mask_patient_id 脱敏）
     metadata = {
-        "patient_name": str(getattr(ds, "PatientName", "未知")),
-        "patient_id": str(getattr(ds, "PatientID", "未知")),
+        "patient_name": _mask_patient_id(str(getattr(ds, "PatientName", "未知"))),
+        "patient_id": _mask_patient_id(str(getattr(ds, "PatientID", "未知"))),
         "patient_sex": str(getattr(ds, "PatientSex", "未知")),
         "patient_age": str(getattr(ds, "PatientAge", "未知")),
         "study_date": str(getattr(ds, "StudyDate", "未知")),

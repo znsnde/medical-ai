@@ -24,6 +24,16 @@
       </el-form>
     </el-card>
 
+    <!-- AI 免责声明 -->
+    <el-alert
+      v-if="report"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="AI 辅助诊断内容由大模型自动生成，仅供参考，不构成医疗诊断或治疗建议；如有不适请及时就医，最终诊断以执业医师意见为准。"
+      style="margin-top:20px;"
+    />
+
     <!-- 诊断结果 -->
     <el-card v-if="report" style="margin-top:20px;">
       <template #header>
