@@ -16,6 +16,7 @@
 | 诊断报告导出 | PDF 报告生成与预览 |
 | 用户与权限 | JWT 认证，管理员/医生/患者三角色 RBAC |
 | 患者自助查看报告 | 患者手机号认领本人档案后，可查看我的病历、诊断报告并下载本人 PDF（三级归属校验） |
+| 软删除与回收站 | 患者/病历/报告删除改软删（`is_deleted` 标记，文件保留），回收站支持级联恢复、彻底删除（purge）、清空回收站 |
 
 ## 技术架构
 
@@ -26,7 +27,7 @@
 └──────────────────────────┬──────────────────────────────┘
                            │ HTTP
 ┌─────────────── 后端 (FastAPI :8000) ────────────────────┐
-│  12 业务模块路由 (api/*) + CORS + 全局异常 + 审计日志      │
+│  13 业务模块路由 (api/*) + CORS + 全局异常 + 审计日志      │
 │  业务层 medical_business/*                               │
 │  ┌──────────┬──────────┬──────────┬──────────┬────────┐ │
 │  │  DeepSeek │  Neo4j   │  Milvus  │  MySQL   │ 本地文件│ │
@@ -50,13 +51,13 @@
 
 ```
 ├── backend/
-│   ├── api/                 # 路由层（12 个业务模块）
+│   ├── api/                 # 路由层（13 个业务模块）
 │   ├── medical_business/    # 业务逻辑（诊断/结构化/图谱/论文/随访）
 │   ├── core/                # 核心服务（LLM/RAG/向量库/影像/日志/安全）
 │   ├── dcmtk_handler/       # DICOM 解析
 │   ├── db/                  # SQLAlchemy 模型、CRUD、初始化脚本（init_db.py）
 │   ├── config/settings.py   # 配置（加载 .env）
-│   ├── tests/               # pytest 冒烟测试（36 项）
+│   ├── tests/               # pytest 冒烟测试（48 项）
 │   ├── Dockerfile           # 后端容器化（含嵌入模型预下载）
 │   └── main.py              # FastAPI 入口
 ├── frontend/                # Vue 3 前端（13 个页面）
@@ -177,6 +178,7 @@ docker compose up -d --build
 | `/api/consultation` | 多轮问诊 | chat、sessions |
 | `/api/reference-image` | 参考影像库 | list、by-record |
 | `/api/dashboard` | 仪表盘 | stats |
+| `/api/recycle` | 回收站 | patients/records/reports 列表、{type}/{id}/restore、{type}/{id}/purge、clear（admin/doctor） |
 | `/api/system` | 系统 | info |
 
 ## 测试
@@ -186,7 +188,7 @@ cd backend
 venv/Scripts/python.exe -m pytest tests/ -v
 ```
 
-36 项冒烟测试（31 通过，5 项依赖宿主 Neo4j 自动 skip），覆盖：应用启动/路由/鉴权、登录与 RBAC、P0 安全（静态目录移除/越权封堵/会话归属/上传白名单）、RAG 降级、影像分析降级、诊断核心链路、患者自助（绑定/我的报告/PDF 本人放行他人 403）。MySQL/Neo4j 不可用时相关用例自动 skip，不阻塞其余。
+48 项冒烟测试（43 通过，5 项依赖宿主 Neo4j 自动 skip），覆盖：应用启动/路由/鉴权、登录与 RBAC、P0 安全（静态目录移除/越权封堵/会话归属/上传白名单）、RAG 降级、影像分析降级、诊断核心链路、患者自助（绑定/我的报告/PDF 本人放行他人 403）、软删除与回收站（级联软删/恢复、purge、清空、统计排除、二次删除防护）。MySQL/Neo4j 不可用时相关用例自动 skip，不阻塞其余。
 
 ## 项目亮点（论文/答辩素材）
 
@@ -196,6 +198,7 @@ venv/Scripts/python.exe -m pytest tests/ -v
 4. **健壮的降级设计**：RAG/图谱/影像/LLM 任一不可用均不阻塞主流程。
 5. **患者数据按归属隔离**：医生侧"全院可见"模型下，患者自助仅能通过手机号认领本人档案，报告下载经 report→record→patient.user_id 三级归属校验，未绑定/他人/匿名一律拒绝。
 6. **工程化**：JWT 独立密钥、CORS 白名单、全局异常统一包装、审计日志（登录/用户管理/诊断）、pytest 冒烟测试、一键种子脚本、Docker 一键部署（全栈容器化）、GitHub Actions 三阶段 CI（后端测试含 MySQL/Neo4j services + 前端构建 + compose 校验）。
+7. **数据可恢复**：患者/病历/报告删除改软删除，误删可进回收站级联恢复；彻底删除（purge）才物理清行与文件，单事务保证一致。
 
 ## 常见问题
 
