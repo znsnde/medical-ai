@@ -69,6 +69,12 @@ const routes = [
     meta: { title: '影像查看', roles: ['admin', 'doctor'] }
   },
   {
+    path: '/recycle',
+    name: 'RecycleBin',
+    component: () => import('../views/RecycleBin.vue'),
+    meta: { title: '回收站', roles: ['admin', 'doctor'] }
+  },
+  {
     path: '/settings',
     name: 'SystemSettings',
     component: () => import('../views/SystemSettings.vue'),

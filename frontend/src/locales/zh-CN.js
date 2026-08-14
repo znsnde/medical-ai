@@ -12,6 +12,7 @@ export default {
     settings: '系统设置',
     myRecords: '我的病历',
     consultation: '问诊咨询',
+    recycle: '回收站',
     logout: '退出登录',
   },
 

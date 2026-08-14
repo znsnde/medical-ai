@@ -11,6 +11,7 @@ export default {
     settings: 'System Settings',
     myRecords: 'My Records',
     consultation: 'Consultation',
+    recycle: 'Recycle Bin',
     logout: 'Logout',
   },
 

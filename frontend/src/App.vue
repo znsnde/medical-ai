@@ -59,6 +59,10 @@
                 <el-icon><ChatLineSquare /></el-icon>
                 <template #title>{{ $t('nav.chat') }}</template>
               </el-menu-item>
+              <el-menu-item index="/recycle">
+                <el-icon><Delete /></el-icon>
+                <template #title>{{ $t('nav.recycle') }}</template>
+              </el-menu-item>
               <el-menu-item index="/settings" v-if="userInfo.role === 'admin'">
                 <el-icon><Setting /></el-icon>
                 <template #title>{{ $t('nav.settings') }}</template>
@@ -119,7 +123,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import {
   Monitor, UserFilled, Document, Aim,
-  Upload, Printer, ChatLineSquare, SwitchButton, Setting, Connection
+  Upload, Printer, ChatLineSquare, SwitchButton, Setting, Connection, Delete
 } from '@element-plus/icons-vue'
 import { getUser, logout as clearAuth } from './utils/auth'
 
