@@ -45,3 +45,13 @@ def setup_logging(level: int = logging.INFO):
 def get_logger(name: str = "app") -> logging.Logger:
     """获取命名 logger（配置在 root 上，各模块自动继承）"""
     return logging.getLogger(name)
+
+
+def get_log_dir() -> str:
+    """日志目录（backend/logs/），供审计查询等定位使用"""
+    return _LOG_DIR
+
+
+def get_log_file_path() -> str:
+    """当前滚动日志文件（logs/backend.log）"""
+    return _LOG_FILE

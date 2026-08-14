@@ -57,7 +57,7 @@
 │   ├── dcmtk_handler/       # DICOM 解析
 │   ├── db/                  # SQLAlchemy 模型、CRUD、初始化脚本（init_db.py）
 │   ├── config/settings.py   # 配置（加载 .env）
-│   ├── tests/               # pytest 冒烟测试（48 项）
+│   ├── tests/               # pytest 冒烟测试（54 项）
 │   ├── Dockerfile           # 后端容器化（含嵌入模型预下载）
 │   └── main.py              # FastAPI 入口
 ├── frontend/                # Vue 3 前端（13 个页面）
@@ -179,7 +179,7 @@ docker compose up -d --build
 | `/api/reference-image` | 参考影像库 | list、by-record |
 | `/api/dashboard` | 仪表盘 | stats |
 | `/api/recycle` | 回收站 | patients/records/reports 列表、{type}/{id}/restore、{type}/{id}/purge、clear（admin/doctor） |
-| `/api/system` | 系统 | info |
+| `/api/system` | 系统 | info、audit（审计日志查询，admin，支持级别/关键字过滤 + 分页） |
 
 ## 测试
 
@@ -188,7 +188,7 @@ cd backend
 venv/Scripts/python.exe -m pytest tests/ -v
 ```
 
-48 项冒烟测试（43 通过，5 项依赖宿主 Neo4j 自动 skip），覆盖：应用启动/路由/鉴权、登录与 RBAC、P0 安全（静态目录移除/越权封堵/会话归属/上传白名单）、RAG 降级、影像分析降级、诊断核心链路、患者自助（绑定/我的报告/PDF 本人放行他人 403）、软删除与回收站（级联软删/恢复、purge、清空、统计排除、二次删除防护）。MySQL/Neo4j 不可用时相关用例自动 skip，不阻塞其余。
+54 项冒烟测试（49 通过，5 项依赖宿主 Neo4j 自动 skip），覆盖：应用启动/路由/鉴权、登录与 RBAC、P0 安全（静态目录移除/越权封堵/会话归属/上传白名单）、RAG 降级、影像分析降级、诊断核心链路、患者自助（绑定/我的报告/PDF 本人放行他人 403）、软删除与回收站（级联软删/恢复、purge、清空、统计排除、二次删除防护）、审计日志查询（admin 权限/级别与关键字过滤/分页/文件缺失兜底）。MySQL/Neo4j 不可用时相关用例自动 skip，不阻塞其余。
 
 ## 项目亮点（论文/答辩素材）
 

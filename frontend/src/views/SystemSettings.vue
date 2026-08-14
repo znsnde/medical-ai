@@ -118,6 +118,36 @@
           </div>
         </el-card>
       </el-tab-pane>
+
+      <!-- ═══ Tab 4: 审计日志 ═══ -->
+      <el-tab-pane label="🔍 审计日志" name="audit">
+        <div class="tab-toolbar">
+          <el-select v-model="auditLevel" placeholder="级别" clearable style="width:120px" @change="reloadAudit">
+            <el-option label="INFO" value="INFO"/>
+            <el-option label="WARNING" value="WARNING"/>
+          </el-select>
+          <el-input v-model="auditKeyword" placeholder="关键字（如：登录成功）" clearable style="width:240px"
+                    @keyup.enter="reloadAudit" @clear="reloadAudit"/>
+          <el-button type="primary" @click="reloadAudit">查询</el-button>
+          <el-button @click="refreshAudit" :loading="loadingAudit">刷新</el-button>
+        </div>
+
+        <el-table :data="auditItems" border v-loading="loadingAudit" style="width:100%">
+          <el-table-column label="时间" prop="time" width="190"/>
+          <el-table-column label="级别" width="100">
+            <template #default="scope">
+              <el-tag :type="auditLevelType(scope.row.level)" size="small">{{ scope.row.level }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="审计事件" prop="message" min-width="300" show-overflow-tooltip/>
+        </el-table>
+
+        <div class="audit-pagination">
+          <el-pagination background layout="total, prev, pager, next"
+                         :total="auditTotal" :page-size="auditPageSize"
+                         :current-page="auditPage" @current-change="onAuditPageChange"/>
+        </div>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -258,9 +288,55 @@ const loadSystemInfo = async () => {
   }
 }
 
+// ── 审计日志 ──
+const auditItems = ref([])
+const auditTotal = ref(0)
+const auditPage = ref(1)
+const auditPageSize = 20
+const auditLevel = ref('')
+const auditKeyword = ref('')
+const loadingAudit = ref(false)
+
+const auditLevelType = (level) => ({ ERROR: 'danger', WARNING: 'warning' }[level] || 'info')
+
+const loadAudit = async () => {
+  loadingAudit.value = true
+  try {
+    const res = await request.get('/system/audit', {
+      params: {
+        skip: (auditPage.value - 1) * auditPageSize,
+        limit: auditPageSize,
+        level: auditLevel.value || '',
+        keyword: auditKeyword.value.trim()
+      }
+    })
+    if (res.code === 200) {
+      auditItems.value = res.data.items
+      auditTotal.value = res.data.total
+    }
+  } catch (e) {
+    // ignore
+  } finally {
+    loadingAudit.value = false
+  }
+}
+
+const reloadAudit = () => {
+  auditPage.value = 1
+  loadAudit()
+}
+
+const onAuditPageChange = (page) => {
+  auditPage.value = page
+  loadAudit()
+}
+
+const refreshAudit = loadAudit
+
 onMounted(() => {
   loadUsers()
   loadSystemInfo()
+  loadAudit()
 })
 </script>
 
@@ -311,5 +387,12 @@ onMounted(() => {
   font-size: 14px;
   color: var(--text-secondary);
   margin-top: 8px;
+}
+
+/* ── 审计日志分页 ── */
+.audit-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>
