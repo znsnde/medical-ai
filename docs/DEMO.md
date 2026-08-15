@@ -108,7 +108,8 @@
 | 故障 | 处理 |
 |---|---|
 | LLM 不可用 | 诊断仍能出（降级到关键词+图谱），明确告知"当前为降级结果" |
-| RAG 卡住 3-4 分钟 | 嵌入模型未缓存；答辩机已缓存，或启动加 `HF_HUB_OFFLINE=1` |
+| RAG 卡住 ~2 分钟 | compose 后端已内置 `HF_HUB_OFFLINE=1`（嵌入模型纯本地加载，免 hf-mirror 远程校验重试）；若仍卡说明镜像内模型缓存缺失 → `docker compose build backend` |
+| 8001 新接口 404（审计日志/回收站点不出） | 演示栈镜像过期（build 只在新代码 merge 后手动执行才生效）→ `docker compose build backend frontend && docker compose up -d backend frontend` |
 | Neo4j 图谱画不出 | 确认容器内 Neo4j healthy；`docker compose restart neo4j` |
 | 前端 8080 打不开 | 本机 80 被占 → 前端映射 8080（.env `FRONTEND_PORT=8080`） |
 | 演示数据乱了 | 重跑 seed 脚本一键重置（图谱+指南+患者） |
