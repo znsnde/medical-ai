@@ -23,11 +23,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 # ── JWT 令牌 ──
 # 使用独立随机 JWT_SECRET，禁止复用 LLM_API_KEY（API key 泄露=令牌可伪造）
+# 空值/过短密钥直接拒绝启动，避免弱密钥被暴力猜解伪造令牌
 SECRET_KEY = settings.JWT_SECRET
 if not SECRET_KEY:
     raise RuntimeError(
         "JWT_SECRET 未配置！请在 .env 中设置独立随机密钥，"
         "例如：openssl rand -hex 32（勿复用 LLM_API_KEY）"
+    )
+if len(SECRET_KEY) < 16:
+    raise RuntimeError(
+        f"JWT_SECRET 过短（{len(SECRET_KEY)}<16 字符），存在被猜解风险！"
+        "请设置独立随机密钥，例如：openssl rand -hex 32（勿复用 LLM_API_KEY）"
     )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 8

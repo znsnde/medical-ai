@@ -12,6 +12,7 @@
 | 启动栈 | `docker compose up -d`（后端 8001、前端 8080，MySQL/Neo4j/Milvus 容器内互通） |
 | 重置演示数据 | `backend/venv/Scripts/python.exe scripts/seed_demo_data.py`（图谱 20 种疾病 + Milvus 18 条指南 + 演示患者） |
 | 管理员 | `admin / admin123` |
+| 演示医生 | `doctor_demo / demo1234`（内科），可管患者/病历/诊断/回收站，无用户管理与审计日志 |
 | 演示患者 | `patient_demo / demo1234`，档案手机号 `13800001111`，已含病历 + 诊断报告 PDF |
 | 联网依赖 | DeepSeek API（LLM）、嵌入模型已缓存（`HF_HUB_OFFLINE=1` 可离线降级） |
 | 演示 URL | 前端 http://localhost:8080 ，后端接口文档 http://localhost:8001/docs |
@@ -67,6 +68,7 @@
 
 ### 4.1 安全设计（1 分钟）
 - 静态目录不再公开挂载：上传的 DICOM/报告 PDF 只能经**带鉴权下载接口**访问。
+- **三角色 RBAC 双视角**（30 秒）：切到医生端登录 `doctor_demo` → 菜单对比——医生无「用户管理」「审计日志」，患者端 `patient_demo` 只看到本人病历。讲：角色权限在**前端路由（`meta.roles`）与后端接口（`require_roles`）双重落地**，一个账号一套视图，且接口层有兜底（直接 curl 也 403）。
 - 越权封堵：参考影像/问诊会话归属校验，患者不可读任意病历。
 - JWT 独立密钥 + CORS 白名单 + 全局异常统一包装 + **审计日志**（登录/用户管理/诊断），**系统设置页可直接查询**，支持按级别/关键字筛选与分页。
 - 登录防爆破 + 上传后缀白名单 + 文件名清洗。
@@ -96,6 +98,7 @@
 | 为什么用三个存储？ | 各司其职：MySQL 业务数据（事务）、Neo4j 关系查询（疾病图天然适合图查询）、Milvus 向量相似度检索（RAG）。 |
 | 降级怎么实现？ | 每层服务封装独立 client，启动/调用时探测，失败置 degraded 状态并返回降级文案；上层调用只关心"拿到了没有"。 |
 | 患者怎么防越权？ | 手机号认领绑定 `user_id`；报告下载逐条校验 `report.record.patient.user_id == 当前用户`；他人/未绑定/匿名分别 403/403/401。 |
+| 三角色权限怎么区分？ | `require_roles` 接口层硬校验 + 前端路由 `meta.roles` 菜单显隐双落地。admin 全量（含用户管理/审计日志/注册医生）；doctor 管患者/病历/诊断/回收站；patient 仅本人档案（手机号认领）。 |
 | 数据从哪来？ | Neo4j 内置 20 种疾病种子数据 + Milvus 18 条临床指南（种子脚本一键重建）；病历/患者为演示数据。 |
 | 换个大模型行不行？ | 行。LLM 层走 openai SDK 统一接口，换 `LLM_BASE_URL` + `LLM_API_KEY` 即可，不影响上层。 |
 | CI 为什么 MySQL/Neo4j 也用容器？ | GitHub Actions `services` 直接拉起，保证测试环境与生产一致，且不依赖 runner 预装。 |

@@ -2,7 +2,8 @@
 演示数据种子脚本
 1. 初始化/重置 Neo4j 知识图谱（基于 knowledge_graph.SEED_DATA，含20种疾病）
 2. 向 Milvus 灌入医疗指南文本（让 RAG 诊断时能召回真实"临床参考指南"）
-3. 建演示患者账号 + 档案 + 病历 + 诊断报告（含PDF，供患者自助查看演示）
+3. 建演示医生账号（doctor 角色，演示三角色 RBAC 的"医生视角"）
+4. 建演示患者账号 + 档案 + 病历 + 诊断报告（含PDF，供患者自助查看演示）
 
 用法：
     f:/Python/Project/backend/venv/Scripts/python.exe scripts/seed_demo_data.py
@@ -29,7 +30,7 @@ from core.medical_knowledge_data import MEDICAL_KNOWLEDGE
 
 def seed_neo4j():
     print("=" * 60)
-    print("  [1/2] 初始化 Neo4j 知识图谱")
+    print("  [1/4] 初始化 Neo4j 知识图谱")
     print("=" * 60)
     from medical_business.knowledge_graph import init_graph
     init_graph()
@@ -38,7 +39,7 @@ def seed_neo4j():
 
 def seed_milvus():
     print("=" * 60)
-    print("  [2/2] 向 Milvus 灌入医疗指南知识")
+    print("  [2/4] 向 Milvus 灌入医疗指南知识")
     print("=" * 60)
     from core.entity_extract import insert_knowledge_to_milvus
     ok = 0
@@ -50,6 +51,42 @@ def seed_milvus():
         else:
             print(f"  FAIL {text[:18]}...")
     print(f"\n共灌入 {ok}/{len(MEDICAL_KNOWLEDGE)} 条")
+    print()
+
+
+# ── 演示医生：三角色 RBAC 的"医生视角"（有患者/病历/诊断权限，无用户管理） ──
+DEMO_DOCTOR = {
+    "username": "doctor_demo",
+    "password": "demo1234",
+    "real_name": "李医生",
+    "department": "内科",
+}
+
+
+def seed_doctor_demo():
+    """建演示医生账号（幂等：重复执行不报错）。医生不建档案——病历由 admin 分配。"""
+    print("=" * 60)
+    print("  [3/4] 建演示医生账号")
+    print("=" * 60)
+    from db.session import SessionLocal
+    from db.crud import user_crud
+    from core.security import hash_password
+
+    d = DEMO_DOCTOR
+    db = SessionLocal()
+    try:
+        user = user_crud.get_user_by_username(db, d["username"])
+        if user:
+            print(f"  账号 {d['username']} 已存在，跳过")
+            return
+        user = user_crud.create_user(
+            db=db, username=d["username"], password_hash=hash_password(d["password"]),
+            real_name=d["real_name"], role="doctor", department=d["department"]
+        )
+        print(f"  医生账号 {d['username']}/{d['password']} (id={user.id}, role=doctor)")
+        print("\n  演示路径：doctor 登录 → 工作台无「用户管理/审计日志」菜单（admin 独有）")
+    finally:
+        db.close()
     print()
 
 
@@ -69,7 +106,7 @@ DEMO_PATIENT = {
 def seed_patient_demo():
     """建演示患者账号 + 档案 + 病历 + 报告（含PDF）。幂等：重复执行不报错。"""
     print("=" * 60)
-    print("  [3/3] 建演示患者自助数据")
+    print("  [4/4] 建演示患者自助数据")
     print("=" * 60)
     from db.session import SessionLocal
     from db.crud import user_crud, patient_crud, record_crud, report_crud
@@ -130,5 +167,6 @@ def verify():
 if __name__ == "__main__":
     seed_neo4j()
     seed_milvus()
+    seed_doctor_demo()
     seed_patient_demo()
     verify()

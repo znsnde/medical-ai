@@ -110,8 +110,8 @@ npm run dev
 ### 3. 初始化演示数据（可选）
 
 ```bash
-# 重置 Neo4j 图谱（20 种疾病）+ Milvus 灌入 18 条医疗指南 + 建演示患者
-#   （patient_demo/demo1234，档案手机号 13800001111，含病历 + 诊断报告 PDF）
+# 重置 Neo4j 图谱（20 种疾病）+ Milvus 灌入 18 条医疗指南 + 建演示医生/患者
+#   （doctor_demo/demo1234 内科、patient_demo/demo1234 档案手机号 13800001111，含病历 + 诊断报告 PDF）
 backend/venv/Scripts/python.exe scripts/seed_demo_data.py
 ```
 
