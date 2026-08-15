@@ -112,6 +112,9 @@ services:
       NEO4J_PASS: ${NEO4J_PASS:-12345678}
       SERVER_PORT: "8000"
       HF_ENDPOINT: https://hf-mirror.com
+      # 嵌入模型已在镜像内预缓存；禁止运行时向 HF 发远程校验（本机/演示网连不上 hf-mirror，
+      # 否则每次 RAG 首调会因 SSL 重试卡 ~110s），纯本地加载秒级完成
+      HF_HUB_OFFLINE: "1"
       CORS_ORIGINS: http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173
     volumes:
       # 上传内容（DICOM/论文/PDF 报告）+ 参考影像持久化到宿主
